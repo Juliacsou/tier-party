@@ -196,16 +196,19 @@
 
     playerRankWait:()=>playerPage(`<div class="center"><div class="eyebrow">Hora de rankear!</div><h2>Olhe para a tela do host.</h2><p class="subtle">Agora o grupo precisa decidir em qual posição cada resposta deve ficar. Quando a sua resposta estiver sendo discutida, não entregue a sua nota.</p><div style="font-size:76px;margin:14px">↕️</div><span class="pill">Sua resposta: ${esc(myRoundAnswer()?.answer_text||'—')}</span><div style="margin-top:18px">${loadingDots('Aguardando o ranking')}</div></div>`),
 
-    hostRoundResult:()=>page(`${topbar(`<div class="pill">Rodada ${state.game.round_no}/${state.game.rounds_total}</div>`)}<section class="panel center-card result-panel" style="width:min(900px,94vw)"><div class="center"><div class="eyebrow">Resultado da rodada</div><h2>Pontuação dos jogadores</h2><p class="subtle">Cada resposta na posição exata rende +50 para cada jogador que participou da rodada. O dono da resposta correta recebe +500 extras.</p></div><div class="player-list result-player-list" style="margin-top:18px">${roundPlayerScoreCards()}</div><div class="actions end" style="margin-top:18px"><button class="btn primary" data-action="nextRound">${state.game.round_no>=state.game.rounds_total?'Ver placar final':'Próxima rodada →'}</button></div></section>`),
+    hostRoundResult:()=>page(`${topbar(`<div class="pill">Rodada ${state.game.round_no}/${state.game.rounds_total}</div>`)}<section class="panel center-card result-panel" style="width:min(900px,94vw)"><div class="center"><div class="eyebrow">Resultado da rodada</div><h2>Pontuação dos jogadores</h2><p class="subtle">Quando uma resposta cai na posição exata, o dono recebe 50 × a quantidade de jogadores da rodada. Cada um dos outros jogadores recebe +50.</p></div><div class="player-list result-player-list" style="margin-top:18px">${roundPlayerScoreCards()}</div><div class="actions end" style="margin-top:18px"><button class="btn primary" data-action="nextRound">${state.game.round_no>=state.game.rounds_total?'Ver placar final':'Próxima rodada →'}</button></div></section>`),
 
     playerRoundResult:()=>{
       const mine=myRoundAnswer();
       const correct=roundAnswers().filter(a=>a.ranked_value===a.secret_value).length;
       const participated=!!mine;
-      const personalBonus=mine?.ranked_value===mine?.secret_value?500:0;
-      const groupBonus=participated?correct*50:0;
-      const earned=personalBonus+groupBonus;
-      return playerPage(`<div class="center"><div class="eyebrow">Fim da rodada</div><h2>${participated?(personalBonus?'Sua resposta caiu no lugar certo!':'Rodada concluída!'):'Você não participou desta rodada.'}</h2><div class="score-pop">+${earned}</div>${participated?`<p class="subtle">${correct} resposta${correct===1?'':'s'} correta${correct===1?'':'s'} no ranking = <strong>+${groupBonus}</strong>${personalBonus?` • sua resposta correta = <strong>+500</strong>`:''}</p>`:`<p class="subtle">Sem resposta enviada, você não recebe os bônus desta rodada.</p>`}<p class="subtle">Sua pontuação total agora é <strong>${state.me?.score||0}</strong>.</p><div style="margin-top:18px">${loadingDots('Aguardando o host')}</div></div>`)
+      const participantCount=roundAnswers().length;
+      const ownCorrect=mine?.ranked_value===mine?.secret_value;
+      const othersCorrect=Math.max(0,correct-(ownCorrect?1:0));
+      const ownBonus=ownCorrect?50*participantCount:0;
+      const rankingBonus=participated?othersCorrect*50:0;
+      const earned=ownBonus+rankingBonus;
+      return playerPage(`<div class="center"><div class="eyebrow">Fim da rodada</div><h2>${participated?(ownCorrect?'Sua resposta caiu no lugar certo!':'Rodada concluída!'):'Você não participou desta rodada.'}</h2><div class="score-pop">+${earned}</div>${participated?`<p class="subtle">${othersCorrect} resposta${othersCorrect===1?'':'s'} correta${othersCorrect===1?'':'s'} de outros jogadores = <strong>+${rankingBonus}</strong>${ownCorrect?` • sua resposta correta = <strong>+${ownBonus}</strong> (50 × ${participantCount})`:''}</p>`:`<p class="subtle">Sem resposta enviada, você não recebe os bônus desta rodada.</p>`}<p class="subtle">Sua pontuação total agora é <strong>${state.me?.score||0}</strong>.</p><div style="margin-top:18px">${loadingDots('Aguardando o host')}</div></div>`)
     },
 
     playerEdit:()=>playerPage(`<div class="center"><div class="eyebrow">Seu perfil</div><h2>Editar nome e cor</h2></div><div class="field"><label>Seu nome</label><input id="editPlayerName" class="input" maxlength="22" value="${esc(state.me?.name||'')}"></div><div class="field" style="margin-top:14px"><label>Sua cor</label><div class="color-grid">${COLORS.map(c=>`<button class="color-choice ${state.selectedColor===c?'selected':''}" style="background:${c}" data-color="${c}" aria-label="cor"></button>`).join('')}</div></div><div class="actions" style="margin-top:18px"><button class="btn ghost" data-action="cancelEditPlayer">Cancelar</button><button class="btn primary" data-action="savePlayerProfile">Salvar</button></div>`),
@@ -241,10 +244,13 @@
     return currentPlayers().map(p=>{
       const mine=rs.find(a=>a.player_id===p.id);
       const participated=participants.has(p.id);
-      const personal=mine&&mine.ranked_value===mine.secret_value?500:0;
-      const groupBonus=participated?correct*50:0;
-      const earned=personal+groupBonus;
-      return `<div class="card player-card"><div class="avatar" style="background:${playerColor(p)}">${esc(p.name?.[0]||'?')}</div><div class="grow"><div class="player-name">${esc(p.name)}</div><div class="subtle">${participated?`Ranking +${groupBonus}${personal?' • resposta +500':''}`:'Não participou da rodada'}</div></div><strong class="${earned?'correct-text':''}">+${earned}</strong></div>`;
+      const ownCorrect=!!(mine&&mine.ranked_value===mine.secret_value);
+      const participantCount=rs.length;
+      const othersCorrect=Math.max(0,correct-(ownCorrect?1:0));
+      const ownBonus=ownCorrect?50*participantCount:0;
+      const rankingBonus=participated?othersCorrect*50:0;
+      const earned=ownBonus+rankingBonus;
+      return `<div class="card player-card"><div class="avatar" style="background:${playerColor(p)}">${esc(p.name?.[0]||'?')}</div><div class="grow"><div class="player-name">${esc(p.name)}</div><div class="subtle">${participated?`Outras respostas +${rankingBonus}${ownCorrect?` • sua resposta +${ownBonus}`:''}`:'Não participou da rodada'}</div></div><strong class="${earned?'correct-text':''}">+${earned}</strong></div>`;
     }).join('');
   }
   function finalBoard(){const ps=[...state.players].sort((a,b)=>(b.score||0)-(a.score||0));const top=ps.slice(0,3),rest=ps.slice(3);const blocks=[top[1],top[0],top[2]].map((p,i)=>p?`<div class="podium-card ${i===1?'first':i===0?'second':'third'}"><div class="place">${i===1?'🥇':i===0?'🥈':'🥉'}</div><div class="avatar" style="background:${playerColor(p)};margin:10px auto">${esc(p.name[0])}</div><strong>${esc(p.name)}</strong><div class="score-pop" style="font-size:30px">${p.score||0}</div></div>`:'').join('');return `<div class="podium">${blocks}</div><div class="rest-list">${rest.map((p,i)=>`<div class="rest-row"><strong>${i+4}º</strong><div class="avatar" style="background:${playerColor(p)}">${esc(p.name[0])}</div><div class="grow"><strong>${esc(p.name)}</strong></div><strong>${p.score||0} pts</strong></div>`).join('')}</div>`}
@@ -337,9 +343,11 @@
     const items=[...rs].sort((a,b)=>(b.ranked_value??-1)-(a.ranked_value??-1));
     for(const a of items){
       const good=a.ranked_value===a.secret_value;
-      await sb.from('tier_answers').update({points_awarded:good?500:0,revealed_at:nowIso()}).eq('id',a.id);
+      const ownerAward=good?50*participantIds.length:0;
+      await sb.from('tier_answers').update({points_awarded:ownerAward,revealed_at:nowIso()}).eq('id',a.id);
       if(good){
         for(const id of participantIds){
+          if(id===a.player_id)continue;
           const p=state.players.find(x=>x.id===id);
           if(!p)continue;
           p.score=(p.score||0)+50;
@@ -347,7 +355,7 @@
         }
         const owner=state.players.find(x=>x.id===a.player_id);
         if(owner){
-          owner.score=(owner.score||0)+500;
+          owner.score=(owner.score||0)+ownerAward;
           await sb.from('tier_players').update({score:owner.score}).eq('id',owner.id);
         }
       }
@@ -364,7 +372,7 @@
   function couchRankingCards(tier){return state.couch.answers.filter(a=>tier===null?a.ranked==null:a.ranked===tier).map(couchAnswerCard).join('')}
   function couchAnswerCard(a){const p=state.couch.players.find(x=>x.id===a.playerId);const good=a.ranked===a.secret;return `<div class="answer-card ${a.revealed?(good?'reveal-good':'reveal-bad'):''}" draggable="${!state.couch.revealing}" data-answer-id="${a.id}" style="--player-color:${p.color}"><div class="avatar" style="background:${p.color}">${esc(p.name[0])}</div><div class="grow"><div class="answer">${esc(a.text)}</div><div class="owner">${esc(p.name)}</div></div>${a.revealed?`<span class="true-badge">${a.secret}</span>`:''}</div>`}
   function couchTierRow(n){return `<div class="tier-row"><div class="tier-label t${n}">${n}</div><div class="tier-drop dropzone" data-tier="${n}">${couchRankingCards(n)}</div></div>`}
-  function couchRevealSequentially(){const items=[...state.couch.answers].sort((a,b)=>b.ranked-a.ranked);let i=0;const next=()=>{if(i>=items.length)return;const a=items[i++];a.revealed=true;const good=a.ranked===a.secret;if(good){state.couch.players.forEach(p=>{p.score+=50;p.roundPoints=(p.roundPoints||0)+50});const owner=state.couch.players.find(x=>x.id===a.playerId);if(owner){owner.score+=500;owner.roundPoints=(owner.roundPoints||0)+500}}render();setTimeout(next,950)};next()}
+  function couchRevealSequentially(){const items=[...state.couch.answers].sort((a,b)=>b.ranked-a.ranked);const participantCount=state.couch.answers.length;let i=0;const next=()=>{if(i>=items.length)return;const a=items[i++];a.revealed=true;const good=a.ranked===a.secret;if(good){state.couch.players.forEach(p=>{if(p.id===a.playerId)return;p.score+=50;p.roundPoints=(p.roundPoints||0)+50});const owner=state.couch.players.find(x=>x.id===a.playerId);if(owner){const ownerAward=50*participantCount;owner.score+=ownerAward;owner.roundPoints=(owner.roundPoints||0)+ownerAward}}render();setTimeout(next,950)};next()}
   function couchFinalBoard(){const oldPlayers=state.players;state.players=state.couch.players;const html=finalBoard();state.players=oldPlayers;return html}
 
   // Resume/join by URL

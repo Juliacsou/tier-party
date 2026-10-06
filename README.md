@@ -39,3 +39,8 @@ O `config.js` já está configurado com o projeto informado anteriormente. Esta 
 - Mantém os controles do jogador acima do conteúdo em todas as etapas.
 - Exibe o cabeçalho do jogador e o botão Sair também no placar final.
 - Ajusta safe-area para celulares/tablets com recortes de tela.
+
+## v1.0
+- Pontuação ajustada: se a resposta do jogador estiver correta, ele recebe `50 x quantidade de jogadores participantes`; os demais participantes recebem `+50`. O dono da resposta não recebe os `+50` adicionais da própria resposta.
+- Jogadores com resposta errada ainda recebem `+50` por cada resposta correta dos demais jogadores.
+- Home mobile redimensionada com logo, tipografia, campo de código e botões maiores; a tier decorativa permanece oculta no mobile.

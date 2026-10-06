@@ -496,3 +496,96 @@ body{height:100dvh;overscroll-behavior:none}
   .home-join-card .input,.home-join-card .btn{height:46px;min-height:46px}
   .home-secondary-actions .btn{min-height:48px!important}
 }
+
+/* v1.0 — stronger mobile home scale */
+@media (max-width:700px){
+  .shell{
+    padding:18px 18px 20px!important;
+  }
+  .home-hero{
+    height:calc(100dvh - 38px)!important;
+    justify-content:flex-start!important;
+    overflow:hidden!important;
+  }
+  .home-controls{
+    width:100%!important;
+    max-width:520px!important;
+    gap:16px!important;
+    padding-top:8px!important;
+  }
+  .home-main-logo{
+    width:min(390px,92vw)!important;
+    max-height:30vh!important;
+    margin:0 auto 8px!important;
+  }
+  .home-join-card{
+    padding:16px!important;
+    border-radius:24px!important;
+  }
+  .home-join-card>label{
+    font-size:14px!important;
+    letter-spacing:1.8px!important;
+    margin-bottom:10px!important;
+  }
+  .home-join-card .quick-join-row{
+    grid-template-columns:minmax(0,1fr) 112px!important;
+    gap:10px!important;
+  }
+  .home-join-card .input{
+    height:64px!important;
+    font-size:24px!important;
+    letter-spacing:6px!important;
+    border-radius:16px!important;
+  }
+  .home-join-card .btn{
+    min-height:64px!important;
+    font-size:16px!important;
+    padding-inline:12px!important;
+    border-radius:16px!important;
+  }
+  .home-secondary-actions{
+    gap:12px!important;
+  }
+  .home-secondary-actions .btn{
+    min-height:70px!important;
+    padding:15px 18px!important;
+    font-size:15px!important;
+    line-height:1.15!important;
+    border-radius:18px!important;
+  }
+  .home-action-svg{
+    width:29px!important;
+    height:29px!important;
+    flex-basis:29px!important;
+  }
+  .home-demo-board{display:none!important}
+}
+
+@media (max-width:420px){
+  .shell{padding:14px 14px 16px!important}
+  .home-hero{height:calc(100dvh - 30px)!important}
+  .home-controls{gap:13px!important;padding-top:3px!important}
+  .home-main-logo{
+    width:min(350px,90vw)!important;
+    max-height:28vh!important;
+    margin-bottom:5px!important;
+  }
+  .home-join-card{padding:14px!important;border-radius:22px!important}
+  .home-join-card>label{font-size:13px!important;margin-bottom:9px!important}
+  .home-join-card .quick-join-row{grid-template-columns:minmax(0,1fr) 104px!important;gap:9px!important}
+  .home-join-card .input{height:60px!important;font-size:22px!important;letter-spacing:5px!important}
+  .home-join-card .btn{min-height:60px!important;font-size:15px!important}
+  .home-secondary-actions .btn{min-height:66px!important;font-size:14px!important;padding:14px 16px!important}
+  .home-action-svg{width:27px!important;height:27px!important;flex-basis:27px!important}
+}
+
+@media (max-width:360px), (max-height:620px) and (max-width:700px){
+  .home-controls{gap:9px!important}
+  .home-main-logo{width:min(300px,86vw)!important;max-height:23vh!important}
+  .home-join-card{padding:11px!important}
+  .home-join-card>label{font-size:11px!important;margin-bottom:6px!important}
+  .home-join-card .input,.home-join-card .btn{height:54px!important;min-height:54px!important}
+  .home-join-card .input{font-size:20px!important}
+  .home-secondary-actions{gap:8px!important}
+  .home-secondary-actions .btn{min-height:58px!important;font-size:12px!important}
+}
