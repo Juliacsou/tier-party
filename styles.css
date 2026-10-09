@@ -2705,3 +2705,63 @@ body{height:100dvh;overscroll-behavior:none}
 .coop-result-stack>.round-result-actions .btn{margin:0;min-height:54px}
 @media(max-height:730px){.coop-result-stack{gap:clamp(17px,3vh,27px)}.coop-result-stack>.coop-round-result{padding:clamp(13px,2.2vh,24px);gap:clamp(8px,1.6vh,16px)}.coop-result-stack .coop-total{font-size:clamp(54px,10.5vh,82px)}.coop-result-stack .coop-delta-inline{font-size:clamp(38px,6vh,56px)}}
 @media(max-height:550px){.coop-result-stack{gap:12px;padding:3px 0 8px}.coop-result-stack>.coop-round-result{padding:8px 16px;gap:6px}.coop-result-stack .coop-total{font-size:45px}.coop-result-stack .coop-total small{margin-top:2px;font-size:13px}.coop-result-stack .coop-delta-inline{font-size:31px}.coop-result-stack .coop-total-label{font-size:15px}.coop-result-stack .mode-badge{padding:5px 10px}.coop-result-stack>.round-result-actions .btn{min-height:42px;padding:8px 18px}}
+
+/* Personagens - aparência neutra e adaptada a telas pequenas */
+.character-avatar{width:48px;height:48px;min-width:48px;object-fit:contain;border:2px solid #24304a;border-radius:14px;background:#fffdf6;display:block;padding:2px;box-sizing:border-box}
+.character-placeholder{display:grid;place-items:center;color:#24304a;font-weight:1000}
+.character-picker{width:100%;min-width:0}.character-picker .player-picker-title{font-size:16px;font-weight:1000;margin-bottom:12px}
+.character-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:12px;max-height:min(250px,34dvh);overflow-y:auto;overflow-x:hidden;padding:7px 9px 11px;scrollbar-width:thin;overscroll-behavior:contain}
+.character-choice{font:900 13px Nunito,sans-serif;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;border:3px solid #24304a;border-radius:18px;background:#fffdfa;color:#24304a;box-shadow:3px 5px 0 #24304a;padding:9px 4px;transition:transform .15s,background .15s}
+.character-choice:hover{transform:translateY(-2px)}.character-choice.selected{background:#ffe19a;outline:3px solid #26c5a7;outline-offset:1px}
+.character-choice img{width:68px;height:68px;object-fit:contain}.character-choice span{max-width:100%;overflow-wrap:anywhere;line-height:1.15}
+.player-profile-screen:has(.character-picker){justify-content:flex-start;padding-top:4vh;box-sizing:border-box;overflow-y:auto;padding-bottom:20px;gap:10px}.player-profile-screen:has(.character-picker) .player-profile-logo{width:min(185px,37vw)}
+.player-profile-screen:has(.character-picker) h1{font-size:clamp(28px,5vw,40px)}.player-profile-screen:has(.character-picker) .player-profile-form{gap:12px}
+.player-hud-avatar{width:48px;height:48px;min-width:48px}.lobby-character{width:50px;height:50px;min-width:50px}
+.ranking-answer-card{display:flex!important;align-items:center!important;gap:9px!important;border-color:#24304a!important;--player-color:#24304a!important}
+.ranking-character{width:49px;height:49px;min-width:49px;flex-shrink:0}.ranking-answer-card .grow{min-width:0;flex:1}
+.lobby-player-card,.waiting-player-card,.round-score-card,.final-player-card,.final-rest-row{--player-color:#24304a!important;border-color:#24304a!important}
+.waiting-character{width:52px;height:52px}.score-character{width:50px;height:50px}.theme-character{width:37px;height:37px;min-width:37px}
+.result-character{width:52px;height:52px}.podium-character{width:clamp(65px,8vw,110px);height:clamp(65px,8vw,110px);min-width:0;border-radius:20px;background:#fff;object-fit:contain}
+.rest-character{width:40px;height:40px;min-width:40px}.round-score-main{display:flex;align-items:center;gap:10px}.round-score-main .round-score-total{margin-left:auto}
+.couch-setup-character{width:46px;height:46px;min-width:46px}.couch-player-row{grid-template-columns:auto minmax(90px,1fr) minmax(100px,150px) auto!important}
+.couch-character-select{min-width:0;border:2px solid #24304a;border-radius:12px;background:#fff;padding:10px;font:900 13px Nunito,sans-serif}
+@media(max-width:580px){.character-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;max-height:min(275px,38dvh)}.character-choice{padding:7px 2px;font-size:11px;border-radius:13px}.character-choice img{width:56px;height:56px}.character-avatar{border-radius:11px}.ranking-character{width:41px;height:41px;min-width:41px}.podium-character{width:62px;height:62px}.couch-player-row{grid-template-columns:auto minmax(60px,1fr) minmax(85px,110px) auto!important;gap:5px!important}.couch-character-select{font-size:10px;padding:7px 4px}.couch-setup-character{width:35px;height:35px;min-width:35px}.player-profile-screen:has(.character-picker){height:auto;min-height:calc(100dvh - 75px);max-height:calc(100dvh - 75px)}.player-profile-screen:has(.character-picker) .player-profile-logo{width:140px}.player-profile-screen:has(.character-picker) .player-profile-form .input{height:51px}}
+
+/* V6: personagens PNG sem moldura interna em todos os contextos do jogo. */
+img.character-avatar,
+.character-choice img {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  object-fit: contain;
+  object-position: center;
+}
+.lobby-player-card .lobby-character {
+  width: clamp(86px, 8vw, 122px) !important;
+  height: clamp(86px, 8vw, 122px) !important;
+  min-width: 0 !important;
+  max-width: 90%;
+  flex-shrink: 0;
+}
+.lobby-player-card {gap: 10px !important;}
+.lobby-player-card .player-name {overflow-wrap: anywhere;}
+.theme-character,.player-hud-avatar,.score-character,.waiting-character,.result-character {
+  width: 58px;
+  height: 58px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.ranking-character {width: 60px; height: 60px; min-width: 60px;}
+.podium-character {width: clamp(80px, 10vw, 132px);height:clamp(80px, 10vw, 132px);min-width:0;}
+.rest-character {width: 52px;height:52px;min-width:0;}
+.tier-drop .answer-card .character-avatar {width: 52px;height: 52px;min-width: 52px;display:block;}
+@media(max-width:580px){
+  .lobby-player-card .lobby-character {width: 80px !important;height: 80px !important;}
+  .theme-character,.player-hud-avatar,.score-character,.waiting-character,.result-character {width:44px;height:44px;}
+  .ranking-character {width: 48px;height:48px;min-width:48px;}
+  .ranking-answer-card .character-avatar {display:block;}
+  .podium-character {width:76px;height:76px;}
+  .tier-drop .answer-card .character-avatar {width:42px;height:42px;min-width:42px;display:block;}
+}
