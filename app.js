@@ -27,6 +27,7 @@
   let livePoll = null;
   let presenceTimer = null;
   let presenceBusy = false;
+  let reconnectBusy = false;
   const PLAYER_SESSION_KEY = 'tier_party_player_session_v1';
 
   const state = {
@@ -115,7 +116,7 @@
 
   async function dbInsert(table,row){const {data,error}=await sb.from(table).insert(row).select().single();if(error)throw error;return data}
   async function dbUpdate(table,id,patch){const {data,error}=await sb.from(table).update(patch).eq('id',id).select().single();if(error)throw error;return data}
-  // A sessao pertence a esta aba. Presenca no servidor detecta fechamentos sem depender de pagehide.
+  // O heartbeat e informativo: bloqueio da tela nao significa saida da partida.
   async function presenceTick(){
     if(!sb||!state.game?.id||!['host','player'].includes(state.role)||presenceBusy)return;
     presenceBusy=true;
@@ -131,6 +132,18 @@
   function startPresence(){
     if(presenceTimer)clearInterval(presenceTimer);
     presenceTick();presenceTimer=setInterval(presenceTick,5000);
+  }
+  async function reconnectAfterWake(){
+    if(reconnectBusy||!sb||!state.game?.id||!state.role)return;
+    reconnectBusy=true;
+    try{
+      // Mobile suspende timers e websocket enquanto a tela esta bloqueada.
+      await presenceTick();
+      if(state.game?.id){
+        subscribe(state.game.id);
+        await refreshAndRender(true);
+      }
+    }finally{reconnectBusy=false}
   }
   function stopPresence(){if(presenceTimer)clearInterval(presenceTimer);presenceTimer=null;}
   function resetEndedSession(){
@@ -180,7 +193,16 @@
       await loadGame(state.game.id);
       if(state.role==='player' && state.game.status==='finished'){resetEndedSession();return;}
       if(state.role==='player' && !state.players.some(p=>p.id===state.me?.id)){
-        stopPresence();clearPlayerSession(); resetRealtime(); state.role=null; state.game=null; state.me=null; state.view='home'; render(); if(!silent)toast('Você não está mais conectado a esta partida.'); return;
+        // Diferenciar remocao explicita de uma sessao que acordou depois do bloqueio.
+        const {data:member,error:memberError}=await sb.from('tier_players').select('id,is_active,left_voluntarily').eq('id',state.me?.id).eq('game_id',state.game.id).maybeSingle();
+        if(memberError)throw memberError;
+        if(member && !member.left_voluntarily && !member.is_active){
+          const {error:restoreError}=await sb.from('tier_players').update({is_active:true,updated_at:nowIso()}).eq('id',member.id).eq('game_id',state.game.id).eq('left_voluntarily',false);
+          if(restoreError)throw restoreError;
+          await loadGame(state.game.id);
+        }else if(!member || member.left_voluntarily){
+          stopPresence();clearPlayerSession(); resetRealtime(); state.role=null; state.game=null; state.me=null; state.view='home'; render(); if(!silent)toast('Você foi removido desta partida.'); return;
+        }
       }
 
       // Enquanto o jogador está digitando, atualizações de polling/realtime não devem
@@ -508,8 +530,8 @@
     editPlayer(){if(!state.me||!state.game)return;if(state.game.status!=='lobby')return toast('O perfil só pode ser editado no lobby.');SELECTED_CHARACTER=state.me.character_id||CHARACTERS[0]?.id;state.editingProfile=true;state.view='playerEdit';render();},
     cancelEditPlayer(){state.editingProfile=false;routeFromGame();render()},
     async savePlayerProfile(){const name=document.getElementById('editPlayerName')?.value.trim();if(!name)return toast('Digite seu nome.');try{state.me=await dbUpdate('tier_players',state.me.id,{name,character_id:SELECTED_CHARACTER,updated_at:nowIso()});state.editingProfile=false;savePlayerSession();routeFromGame();render()}catch(e){toast(e.message)}},
-    async disconnectPlayer(){if(!state.me||!state.game)return;if(appConfirmResolver)return;if(!(await appConfirm('Você pode entrar novamente com o código da sala depois, se ela ainda estiver aberta.',{title:'Sair da partida?',confirmText:'Sair',cancelText:'Ficar',danger:true})))return;try{await sb.from('tier_players').update({is_active:false,updated_at:nowIso()}).eq('id',state.me.id).eq('game_id',state.game.id)}catch(e){console.warn(e)}stopPresence();clearPlayerSession();sessionStorage.removeItem('tier_player_id');resetRealtime();state.role=null;state.game=null;state.me=null;state.players=[];state.answers=[];state.editingProfile=false;state.view='home';history.replaceState({},'',location.pathname);render();toast('Você saiu da partida.')},
-    async kick(id){const p=state.players.find(x=>x.id===id);if(!(await appConfirm(`Expulsar ${p?.name||'este jogador'} da partida?`,{title:'Remover jogador?',confirmText:'Remover',cancelText:'Cancelar',danger:true})))return;try{await sb.from('tier_players').update({is_active:false}).eq('id',id);await refreshAndRender()}catch(e){toast(e.message)}},
+    async disconnectPlayer(){if(!state.me||!state.game)return;if(appConfirmResolver)return;if(!(await appConfirm('Você pode entrar novamente com o código da sala depois, se ela ainda estiver aberta.',{title:'Sair da partida?',confirmText:'Sair',cancelText:'Ficar',danger:true})))return;try{await sb.from('tier_players').update({is_active:false,left_voluntarily:true,updated_at:nowIso()}).eq('id',state.me.id).eq('game_id',state.game.id)}catch(e){console.warn(e)}stopPresence();clearPlayerSession();sessionStorage.removeItem('tier_player_id');resetRealtime();state.role=null;state.game=null;state.me=null;state.players=[];state.answers=[];state.editingProfile=false;state.view='home';history.replaceState({},'',location.pathname);render();toast('Você saiu da partida.')},
+    async kick(id){const p=state.players.find(x=>x.id===id);if(!(await appConfirm(`Expulsar ${p?.name||'este jogador'} da partida?`,{title:'Remover jogador?',confirmText:'Remover',cancelText:'Cancelar',danger:true})))return;try{await sb.from('tier_players').update({is_active:false,left_voluntarily:true,updated_at:nowIso()}).eq('id',id);await refreshAndRender()}catch(e){toast(e.message)}},
     async startGame(){if(currentPlayers().length<2)return;try{await loadThemes();const g=await dbUpdate('tier_games',state.game.id,{status:'theme',round_no:1,theme_candidate:randomTheme(),updated_at:nowIso()});state.game=g;routeFromGame();render()}catch(e){toast(e.message)}},
     async skipTheme(){try{await loadThemes();state.game=await dbUpdate('tier_games',state.game.id,{theme_candidate:randomTheme(state.game.theme_candidate),updated_at:nowIso()});render()}catch(e){toast(e.message)}},
     async chooseTheme(){try{const deadline=infiniteTime()?null:new Date(Date.now()+state.game.answer_seconds*1000).toISOString();const assignments=shuffledAssignments(currentPlayers());state.answerDraft='';state.answerDraftRound=state.game.round_no;state.game=await dbUpdate('tier_games',state.game.id,{status:'answering',current_theme:state.game.theme_candidate,assignments,answer_deadline:deadline,updated_at:nowIso()});routeFromGame();render()}catch(e){toast(e.message)}},
@@ -598,8 +620,12 @@
     if(!hasSupabase)return false;
     const sess=playerSession();if(!sess?.gameId||!sess?.playerId)return false;
     try{
-      const [{data:g},{data:p}]=await Promise.all([sb.from('tier_games').select('*').eq('id',sess.gameId).maybeSingle(),sb.from('tier_players').select('*').eq('id',sess.playerId).eq('game_id',sess.gameId).eq('is_active',true).maybeSingle()]);
-      if(!g||!p||g.status==='finished'){clearPlayerSession();return false}
+      const [{data:g},{data:p}]=await Promise.all([sb.from('tier_games').select('*').eq('id',sess.gameId).maybeSingle(),sb.from('tier_players').select('*').eq('id',sess.playerId).eq('game_id',sess.gameId).maybeSingle()]);
+      if(!g||!p||p.left_voluntarily||g.status==='finished'){clearPlayerSession();return false}
+      if(!p.is_active){
+        const {error:reactivateError}=await sb.from('tier_players').update({is_active:true,updated_at:nowIso()}).eq('id',p.id).eq('game_id',g.id).eq('left_voluntarily',false);
+        if(reactivateError)throw reactivateError;
+      }
       state.role='player';state.game=g;state.me=p;sessionStorage.setItem('tier_player_id',p.id);subscribe(g.id);startPresence();await loadGame(g.id);routeFromGame();return true;
     }catch(_){return false}
   }
@@ -656,6 +682,9 @@
 
   // A navegacao, recarga ou troca de aba nao encerra a partida.
   // Ao fechar o navegador, o heartbeat para; o servidor expira a sessao.
-  window.addEventListener('pageshow',()=>{if(state.game&&state.role)presenceTick()});
+  window.addEventListener('pageshow',()=>{if(state.game&&state.role)reconnectAfterWake()});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)reconnectAfterWake()});
+  window.addEventListener('focus',()=>{if(state.game&&state.role)reconnectAfterWake()});
+  window.addEventListener('online',()=>{if(state.game&&state.role)reconnectAfterWake()});
 
 })();

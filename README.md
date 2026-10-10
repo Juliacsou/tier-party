@@ -44,3 +44,12 @@ O `config.js` já está configurado com o projeto informado anteriormente. Esta 
 - Pontuação ajustada: se a resposta do jogador estiver correta, ele recebe `50 x quantidade de jogadores participantes`; os demais participantes recebem `+50`. O dono da resposta não recebe os `+50` adicionais da própria resposta.
 - Jogadores com resposta errada ainda recebem `+50` por cada resposta correta dos demais jogadores.
 - Home mobile redimensionada com logo, tipografia, campo de código e botões maiores; a tier decorativa permanece oculta no mobile.
+
+## Correção de sessão em celulares (outubro/2026)
+
+1. Execute `ATUALIZACAO_SESSAO.sql` no SQL Editor do Supabase **antes** de publicar esta versão.
+2. Publique todos os arquivos atualizados, principalmente `app.js`.
+3. Jogadores preservam a sessão por aba (`sessionStorage`) durante bloqueio de tela, segundo plano e recarga, até o encerramento da sessão do navegador. O botão Sair e a remoção pelo host continuam explícitos.
+4. A coluna `left_voluntarily` impede que processos antigos de expiração de presença desativem jogadores por engano. A retomada reconecta as assinaturas em tempo real e consulta os dados da partida.
+5. Limitação: navegadores podem descartar a aba inteira, e alguns restauram abas mesmo após reiniciar; o armazenamento de sessão é controlado pelo navegador. Teste em um aparelho real usando bloqueio prolongado e alternância de aplicativos.
+6. Se existir uma rotina de banco que encerre *a partida inteira* quando o host perde o heartbeat, ela precisará ser ajustada separadamente; esta migração protege a sessão dos jogadores, não o encerramento automático de salas.
