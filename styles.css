@@ -2765,3 +2765,124 @@ img.character-avatar,
   .podium-character {width:76px;height:76px;}
   .tier-drop .answer-card .character-avatar {width:42px;height:42px;min-width:42px;display:block;}
 }
+
+/* Tier Party: controls added to live game screens */
+.topbar-right{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;gap:12px;min-width:0;flex-wrap:wrap}
+.topbar-right>.mode-badge{margin-left:0}
+.live-room-code{border:3px solid #24304a;border-radius:15px;background:#ffe08d;color:#24304a;box-shadow:3px 4px 0 #172134;padding:5px 12px;display:flex;flex-direction:column;align-items:center;gap:0;cursor:pointer;flex-shrink:0;font-family:inherit}
+.live-room-code small{font-size:10px;font-weight:1000;letter-spacing:.08em}
+.live-room-code strong{font-size:21px;letter-spacing:.13em;line-height:1.2;font-weight:1000}
+.waiting-player-card{position:relative}
+.round-kick-btn{position:absolute;right:-10px;top:-10px;width:29px;height:29px;display:grid;place-items:center;border:3px solid #24304a;border-radius:50%;background:#ff6668;color:#fff;font-size:21px;line-height:1;font-weight:1000;cursor:pointer;box-shadow:2px 3px 0 #24304a;z-index:3}
+.round-kick-btn:hover{background:#e63e49}
+.ranking-drag-ghost{position:fixed!important;z-index:99999!important;pointer-events:none!important;transform:translate(-50%,-50%);width:220px!important;opacity:.92;box-shadow:6px 8px 0 #24304a!important}
+.ranking-answer-card{touch-action:none;cursor:grab}
+.ranking-answer-card:active{cursor:grabbing}
+.dropzone.dragover,.ranking-bank-v119.dragover{outline:4px dashed #ff9d32;outline-offset:-5px;background:rgba(255,211,88,.23)}
+@media(max-width:680px){.topbar-right{gap:6px}.live-room-code{padding:4px 7px;border-width:2px}.live-room-code strong{font-size:15px}.live-room-code small{font-size:8px}}
+
+/* 2026-10-11: fixed host HUD alignment on waiting and ranking screens. */
+.topbar.game-hud-topbar {
+  position:relative;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  min-height:clamp(100px,11vh,142px);
+  gap:12px;
+}
+.game-hud-topbar .brand {position:relative;z-index:1;flex:0 0 auto}
+.game-hud-topbar .topbar-right {
+  display:flex;
+  flex:1 1 auto;
+  justify-content:flex-end;
+  align-items:center;
+  flex-wrap:nowrap;
+  gap:clamp(8px,1.2vw,20px);
+  margin-left:auto;
+  min-width:0;
+}
+.game-hud-topbar .ranking-theme-card,
+.game-hud-topbar .waiting-theme-card {
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  width:min(42vw,650px);
+  min-width:0;
+  max-width:650px;
+  box-sizing:border-box;
+  z-index:0;
+}
+.game-hud-topbar .ranking-round-count {order:1;margin:0;padding:0;flex:0 0 auto}
+.game-hud-topbar .live-room-code {order:2;flex:0 0 auto}
+.game-hud-topbar .waiting-timer-ring {order:3;flex:0 0 auto}
+/* Keep the right-side code and timer clear of the centered theme at smaller desktop widths. */
+@media(max-width:1200px) {
+  .game-hud-topbar .ranking-theme-card,
+  .game-hud-topbar .waiting-theme-card {width:min(39vw,520px)}
+  .game-hud-topbar .waiting-timer-ring {width:clamp(70px,7vw,104px)}
+}
+@media(max-width:850px) {
+  .topbar.game-hud-topbar {min-height:100px}
+  .game-hud-topbar .brand img {max-width:110px;height:auto}
+  .game-hud-topbar .ranking-theme-card,
+  .game-hud-topbar .waiting-theme-card {width:38vw;padding:8px 10px}
+  .game-hud-topbar .ranking-theme-card strong,
+  .game-hud-topbar .waiting-theme-card strong {font-size:clamp(16px,2.7vw,27px)}
+  .game-hud-topbar .ranking-round-count {font-size:23px}
+  .game-hud-topbar .waiting-timer-ring {width:70px;padding:4px}
+  .game-hud-topbar .waiting-timer-inner {font-size:22px}
+}
+@media(max-width:580px) {
+  .topbar.game-hud-topbar {min-height:120px;align-items:flex-start;padding-top:3px}
+  .game-hud-topbar .brand {display:block!important}
+  .game-hud-topbar .brand img {max-width:90px}
+  .game-hud-topbar .topbar-right {gap:5px}
+  .game-hud-topbar .ranking-theme-card,
+  .game-hud-topbar .waiting-theme-card {top:auto;bottom:0;left:50%;transform:translateX(-50%);width:min(92vw,420px);max-width:none}
+  .game-hud-topbar .ranking-round-count {font-size:20px}
+  .game-hud-topbar .waiting-timer-ring {width:54px;padding:3px}
+  .game-hud-topbar .waiting-timer-inner {border-width:2px;font-size:17px}
+  .game-hud-topbar .waiting-timer-ring::after {border-width:2px}
+}
+
+/* Correcoes pontuais 2026-10-11: lobby, nomes e controles de tema */
+/* Lobby: cards mantem dimensoes proprias e passam a ocupar as linhas seguintes. */
+.lobby-players-panel .lobby-player-list {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(190px, 240px));
+  grid-auto-rows:240px;
+  justify-content:start;
+  align-content:start;
+  align-items:start;
+  gap:18px;
+  min-height:0;
+  flex:1 1 auto;
+  overflow-x:hidden;
+  overflow-y:auto;
+  padding:3px 12px 12px 3px;
+}
+.lobby-players-panel .lobby-player-card {
+  width:100%;height:100%;aspect-ratio:auto;
+  min-height:0;
+}
+/* Escolha do tema: reservar largura para o avatar sem sobrepor o nome. */
+.theme-info-card .theme-score-row {
+  grid-template-columns:60px minmax(0,1fr) auto;
+  column-gap:14px;
+}
+.theme-info-card .theme-score-row .theme-character {
+  width:58px;height:58px;min-width:0;
+}
+/* Codigo imediatamente antes do botao Encerrar; botao no extremo direito. */
+.topbar-right:has(> .theme-end-btn) .live-room-code {order:0}
+.topbar-right:has(> .theme-end-btn) .theme-end-btn {order:1}
+@media(max-width:580px) {
+  .lobby-players-panel .lobby-player-list {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    grid-auto-rows:190px;
+    gap:12px;
+  }
+  .theme-info-card .theme-score-row {grid-template-columns:46px minmax(0,1fr) auto;gap:10px}
+  .theme-info-card .theme-score-row .theme-character {width:44px;height:44px}
+}

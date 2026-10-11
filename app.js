@@ -28,6 +28,9 @@
   let presenceTimer = null;
   let presenceBusy = false;
   let reconnectBusy = false;
+  let draggingAnswer = false;
+  let rankingSaving = false;
+  let refreshBusy = false;
   const PLAYER_SESSION_KEY = 'tier_party_player_session_v1';
 
   const state = {
@@ -53,9 +56,9 @@
   }
   function modeBadge(mode,extra=''){return `<div class="mode-badge mode-${modeTone(mode)}">${modeIcon(mode)}<span>${esc(modeName(mode))}${extra}</span></div>`}
   function coopThemeSummary(mode,round,totalRounds,score){return `<div class="coop-theme-summary">${modeBadge(mode)}<div class="coop-theme-stat"><small>Rodada</small><strong>${round}/${totalRounds}</strong></div><div class="coop-theme-stat"><small>Pontos do grupo</small><strong>${score}</strong></div></div>`}
-  function deltaFromAnswers(answers,mode){const total=answers.length,correct=answers.filter(a=>(a.ranked_value??a.ranked)===(a.secret_value??a.secret)).length;return mode==='coop_challenge'?(total>0&&correct===total?correct*50:0):(2*correct-total)*50}
+  function deltaFromAnswers(answers,mode){const total=answers.length,correct=answers.filter(a=>(a.ranked_value??a.ranked)===(a.secret_value??a.secret)).length;return mode==='coop_challenge'?(total>0&&correct===total?correct*50:0):correct*50-(total-correct)*25}
   function groupResult(total,delta,mode,round){const sign=delta>0?'+':'';const deltaClass=delta<0?'negative':'positive';return `<section class="coop-results coop-round-result"><div class="coop-kicker-wrap">${modeBadge(mode,` · Rodada ${round}`)}</div><div class="coop-total-label">Pontuação do grupo</div><div class="coop-total">${total} <small>pontos</small></div><div class="coop-delta-inline ${deltaClass}">${sign}${delta}</div></section>`}
-  function modeChooser(mode,action){return `<div class="mode-picker"><div class="mode-picker-title">Modo de jogo</div><div class="mode-picker-options">${[['competitive','Competitivo','Cada jogador por si'],['coop_normal','Cooperativo','+50 por acerto, −50 por erro'],['coop_challenge','Desafio','Todos acertam para pontuar']].map(([key,title,desc])=>`<button class="mode-choice mode-${modeTone(key)} ${mode===key?'chosen':''}" data-action="${action}" data-mode="${key}"><div class="mode-choice-icon">${modeIcon(key)}</div><strong>${title}</strong><small>${desc}</small></button>`).join('')}</div></div>`}
+  function modeChooser(mode,action){return `<div class="mode-picker"><div class="mode-picker-title">Modo de jogo</div><div class="mode-picker-options">${[['competitive','Competitivo','Cada jogador por si'],['coop_normal','Cooperativo','+50 por acerto, −25 por erro'],['coop_challenge','Desafio','Todos acertam para pontuar']].map(([key,title,desc])=>`<button class="mode-choice mode-${modeTone(key)} ${mode===key?'chosen':''}" data-action="${action}" data-mode="${key}"><div class="mode-choice-icon">${modeIcon(key)}</div><strong>${title}</strong><small>${desc}</small></button>`).join('')}</div></div>`}
   function esc(v=''){return String(v).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
   function uid(){return crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now();}
   function code(){return Math.random().toString(36).slice(2,6).toUpperCase();}
@@ -90,7 +93,7 @@
   function teardownChannel(){if(channel&&sb){sb.removeChannel(channel);channel=null}}
   function resetRealtime(){clearTimers();teardownChannel();}
   function page(inner){return `<div class="bg"><div class="shell">${inner}</div></div>`}
-  function topbar(extra=''){return `<div class="topbar"><div class="brand"><img src="assets/tier-party-logo.png" alt="Tier Party"></div>${extra}</div>`}
+  function topbar(extra=''){const join=state.game?.join_code&&state.role==='host'&&state.game.status!=='lobby'?`<button class="live-room-code" data-action="shareGame" title="Compartilhar código da partida"><small>CÓDIGO</small><strong>${esc(state.game.join_code)}</strong></button>`:'';const layout=(extra.includes('ranking-theme-card')||extra.includes('waiting-theme-card'))?' game-hud-topbar':'';return `<div class="topbar${layout}"><div class="brand"><img src="assets/tier-party-logo.png" alt="Tier Party"></div><div class="topbar-right">${extra}${join}</div></div>`}
   function backBtn(){return `<button class="btn ghost small" data-action="home">← Voltar</button>`}
   function playerColor(){return NEUTRAL_PLAYER}
   function characterFor(p){return CHARACTERS.find(c=>String(c.id)===String(p?.character_id))}
@@ -175,10 +178,12 @@
       .on('postgres_changes',{event:'*',schema:'public',table:'tier_players',filter:`game_id=eq.${gameId}`},async()=>{await refreshAndRender()})
       .on('postgres_changes',{event:'*',schema:'public',table:'tier_answers',filter:`game_id=eq.${gameId}`},async()=>{await refreshAndRender()})
       .subscribe();
+    if(livePoll)clearInterval(livePoll);
     livePoll=setInterval(()=>refreshAndRender(true),3000);
   }
   async function refreshAndRender(silent=false){
-    if(!state.game||!sb)return;
+    if(!state.game||!sb||draggingAnswer||rankingSaving||refreshBusy)return;
+    refreshBusy=true;
     const active=document.activeElement;
     const typingAnswer=state.role==='player' && state.view==='playerAnswer' && active?.id==='answerText';
     const typingProfile=state.role==='player' && state.editingProfile && (active?.id==='editPlayerName');
@@ -189,6 +194,7 @@
     const profileStart=typingProfile ? active.selectionStart : null;
     const profileEnd=typingProfile ? active.selectionEnd : null;
     const previousStatus=state.game.status;
+    const preservedAnswer=state.answerDraftRound===state.game.round_no?state.answerDraft:'';
     try{
       await loadGame(state.game.id);
       if(state.role==='player' && state.game.status==='finished'){resetEndedSession();return;}
@@ -207,8 +213,8 @@
 
       // Enquanto o jogador está digitando, atualizações de polling/realtime não devem
       // reconstruir a tela e roubar o foco. Se a etapa mudou, renderizamos normalmente.
-      if(typingAnswer && previousStatus==='answering' && state.game.status==='answering' && !myRoundAnswer()){
-        state.answerDraft=answerValue||'';state.answerDraftRound=state.game.round_no;
+      if((typingAnswer || (state.role==='player' && state.view==='playerAnswer' && preservedAnswer && !document.hidden)) && previousStatus==='answering' && state.game.status==='answering' && !myRoundAnswer() && (state.game.assignments||{})[state.me?.id]!=null){
+        state.answerDraft=typingAnswer?answerValue||'':preservedAnswer;state.answerDraftRound=state.game.round_no;
         return;
       }
       if(typingProfile && previousStatus==='lobby' && state.game.status==='lobby' && state.editingProfile){
@@ -224,6 +230,7 @@
       if(typingProfile && state.game?.status==='lobby' && state.editingProfile) requestAnimationFrame(()=>{const el=document.getElementById('editPlayerName');if(el){el.value=profileValue||'';el.focus();try{el.setSelectionRange(profileStart,profileEnd)}catch(_){}}});
     }
     catch(e){if(!silent)toast(e.message)}
+    finally{refreshBusy=false}
   }
   function routeFromGame(){
     if(!state.game)return;
@@ -342,6 +349,7 @@
   function myRoundAnswer(){return state.answers.find(a=>a.round_no===state.game.round_no&&a.player_id===state.me?.id)}
   function roundAnswers(){return state.answers.filter(a=>a.round_no===state.game.round_no)}
   function currentPlayers(){return state.players.filter(p=>p.is_active)}
+  function roundParticipants(){return currentPlayers().filter(p=>Object.prototype.hasOwnProperty.call(state.game?.assignments||{},p.id))}
   function answeredCount(){return roundAnswers().length}
   function rankMapFromAnswers(){const m={};roundAnswers().forEach(a=>{if(Number.isInteger(a.ranked_value))m[a.id]=a.ranked_value});return m}
 
@@ -360,11 +368,12 @@
 
     hostTheme:()=>page(`${topbar(`<button class="btn coral theme-end-btn" data-action="endGame">Encerrar jogo</button>`)}${coop(gameMode())?`<div class="theme-layout theme-layout-coop"><section class="theme-choice-column theme-choice-column-coop">${coopThemeSummary(gameMode(),state.game.round_no,state.game.rounds_total,state.game.group_score||0)}<div class="theme-suggestion-label">Sugestão de tema</div><div class="theme-choice-card"><div class="theme-choice-name">${esc(state.game.theme_candidate||'')}</div></div><div class="theme-choice-actions"><button class="btn theme-skip-btn" data-action="skipTheme"><span>Pular tema</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8A8 8 0 1 0 20 14"></path><path d="M19.5 3v5h-5"></path></svg></button><button class="btn primary theme-choose-btn" data-action="chooseTheme">Escolher este tema →</button></div></section></div>`:`<div class="theme-layout theme-layout-v112"><section class="theme-choice-column"><div class="theme-suggestion-label">Sugestão de tema</div><div class="theme-choice-card"><div class="theme-choice-name">${esc(state.game.theme_candidate||'')}</div></div><div class="theme-choice-actions"><button class="btn theme-skip-btn" data-action="skipTheme"><span>Pular tema</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.5 8A8 8 0 1 0 20 14"></path><path d="M19.5 3v5h-5"></path></svg></button><button class="btn primary theme-choose-btn" data-action="chooseTheme">Escolher este tema →</button></div></section><aside class="theme-info-column"><div class="theme-info-card"><div class="theme-round-indicator"><strong>${state.game.round_no}<small>/${state.game.rounds_total}</small></strong></div><div class="theme-scoreboard">${currentPlayers().map(p=>`<div class="theme-score-row">${characterImage(p,"theme-character")}<span class="theme-score-name">${esc(p.name)}</span><strong class="theme-score-points">${p.score||0}</strong></div>`).join('')}</div></div></aside></div>`}`),
 
-    hostWaiting:()=>page(`${topbar(`<div class="theme-banner waiting-theme-card"><div class="tiny">Tema da rodada</div><strong>${esc(state.game.current_theme)}</strong></div><div class="waiting-timer-ring ${infiniteTime()?'infinite':''}" ${infiniteTime()?'':'data-timer-ring'} style="--timer-pct:${infiniteTime()?100:Math.max(0,Math.min(100,(secondsLeft(state.game.answer_deadline)/(Number(state.game.answer_seconds)||1))*100))}%"><div class="waiting-timer-inner timer" ${infiniteTime()?'':'data-timer'}>${infiniteTime()?'∞':secondsLeft(state.game.answer_deadline)}</div></div>`)}<section class="host-waiting-stage"><div class="waiting-status-row"><strong class="waiting-count">${answeredCount()}/${currentPlayers().length}</strong><span class="loading-dots waiting-loading" aria-label="Aguardando respostas"><i></i><i></i><i></i></span></div><div class="progress waiting-progress"><span style="width:${currentPlayers().length?answeredCount()/currentPlayers().length*100:0}%"></span></div><div class="waiting-player-grid">${currentPlayers().map(p=>{const answered=!!roundAnswers().find(a=>a.player_id===p.id);const color=playerColor(p);return `<div class="waiting-player-card ${answered?'answered':''}" style="--player-color:${color}">${characterImage(p,"waiting-character")}<div class="waiting-player-name">${esc(p.name)}</div>${answered?'<div class="waiting-player-check" aria-label="Resposta enviada">✓</div>':''}</div>`}).join('')}</div><div class="waiting-footer"><button class="btn dark" data-action="forceRanking">Ir para o ranking agora →</button></div></section>`),
+    hostWaiting:()=>page(`${topbar(`<div class="theme-banner waiting-theme-card"><div class="tiny">Tema da rodada</div><strong>${esc(state.game.current_theme)}</strong></div><div class="waiting-timer-ring ${infiniteTime()?'infinite':''}" ${infiniteTime()?'':'data-timer-ring'} style="--timer-pct:${infiniteTime()?100:Math.max(0,Math.min(100,(secondsLeft(state.game.answer_deadline)/(Number(state.game.answer_seconds)||1))*100))}%"><div class="waiting-timer-inner timer" ${infiniteTime()?'':'data-timer'}>${infiniteTime()?'∞':secondsLeft(state.game.answer_deadline)}</div></div>`)}<section class="host-waiting-stage"><div class="waiting-status-row"><strong class="waiting-count">${answeredCount()}/${roundParticipants().length}</strong><span class="loading-dots waiting-loading" aria-label="Aguardando respostas"><i></i><i></i><i></i></span></div><div class="progress waiting-progress"><span style="width:${roundParticipants().length?answeredCount()/roundParticipants().length*100:0}%"></span></div><div class="waiting-player-grid">${roundParticipants().map(p=>{const answered=!!roundAnswers().find(a=>a.player_id===p.id);const color=playerColor(p);return `<div class="waiting-player-card ${answered?'answered':''}" style="--player-color:${color}">${characterImage(p,"waiting-character")}<div class="waiting-player-name">${esc(p.name)}</div>${answered?'<div class="waiting-player-check" aria-label="Resposta enviada">✓</div>':''}<button class="round-kick-btn" data-kick="${p.id}" aria-label="Expulsar ${esc(p.name)}" title="Expulsar jogador">×</button></div>`}).join('')}</div><div class="waiting-footer"><button class="btn dark" data-action="forceRanking">Ir para o ranking agora →</button></div></section>`),
 
     playerAnswer:()=>{
       const a=myRoundAnswer(); if(a)return playerPage(`<div class="player-state-stage"><div class="player-success-icon">✓</div><div class="player-state-kicker">Resposta enviada</div><div class="player-own-answer">${esc(a.answer_text)}</div><div class="player-loading-line"><strong>Aguardando jogadores</strong>${loadingDots('')}</div></div>`);
       const assignment=(state.game.assignments||{})[state.me?.id];
+      if(assignment==null)return playerPage(`<div class="player-state-stage"><div class="player-state-kicker">Você entrou na partida!</div><h1>Prepare-se para a próxima rodada</h1><p>Esta rodada já começou. Você poderá responder a partir da próxima.</p><div class="player-loading-line">${loadingDots('Aguardando próxima rodada')}</div></div>`);
       if(!infiniteTime()&&secondsLeft(state.game.answer_deadline)<=0)return playerPage(`<div class="player-state-stage"><div class="player-timeout-icon">!</div><div class="player-state-kicker">Tempo encerrado</div><h1>Rodada encerrada</h1><div class="player-loading-line"><strong>Aguardando o host</strong>${loadingDots('')}</div></div>`);
       return playerPage(`<div class="player-answer-head"><div class="player-round-number">${state.game.round_no}/${state.game.rounds_total}</div><div class="waiting-timer-ring player-waiting-timer ${infiniteTime()?'infinite':''}" ${infiniteTime()?'':'data-timer-ring'} style="--timer-pct:${infiniteTime()?100:Math.max(0,Math.min(100,(secondsLeft(state.game.answer_deadline)/(Number(state.game.answer_seconds)||1))*100))}%"><div class="waiting-timer-inner timer" ${infiniteTime()?'':'data-timer'}>${infiniteTime()?'∞':secondsLeft(state.game.answer_deadline)}</div></div></div><div class="player-secret-wrap"><div class="secret-score">${assignment ?? '?'}</div></div><div class="player-topic-plain">${esc(state.game.current_theme)}</div><div class="player-answer-form"><input id="answerText" class="input player-answer-input" maxlength="48" placeholder="Digite sua resposta…" value="${esc(state.answerDraftRound===state.game.round_no?state.answerDraft:'')}"><button class="btn primary player-wide-btn" data-action="submitAnswer">Enviar resposta →</button></div>`)
     },
@@ -463,26 +472,60 @@
     return `<div class="final-board"><div class="final-podium">${podium}</div>${rest?`<div class="final-rest-list">${rest}</div>`:''}</div>`
   }
   function setupDragDrop(couch=false){
-    const canDrag=couch?!state.couch.revealing:state.game.status==='ranking'; if(!canDrag)return;
-    const moveAnswer=async(id,tier)=>{if(couch){const a=state.couch.answers.find(x=>x.id===id);if(a)a.ranked=tier;render()}else{try{await sb.from('tier_answers').update({ranked_value:tier}).eq('id',id);await refreshAndRender()}catch(err){toast(err.message)}}};
-    document.querySelectorAll('.answer-card[draggable="true"]').forEach(card=>card.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',card.dataset.answerId)));
-    document.querySelectorAll('.dropzone').forEach(zone=>{
-      zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('dragover')});
-      zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
-      zone.addEventListener('drop',async e=>{e.preventDefault();e.stopPropagation();zone.classList.remove('dragover');const id=e.dataTransfer.getData('text/plain');const tier=zone.id==='bank'?null:Number(zone.dataset.tier);await moveAnswer(id,tier)});
+    const enabled=couch?!state.couch.revealing:state.game.status==='ranking';
+    if(!enabled)return;
+    const moveAnswer=async(id,tier,card)=>{
+      if(!id)return;
+      if(couch){const a=state.couch.answers.find(x=>x.id===id);if(a)a.ranked=tier;render();return;}
+      const answer=state.answers.find(a=>a.id===id);
+      if(!answer)return;
+      const previous=answer.ranked_value;
+      rankingSaving=true;
+      answer.ranked_value=tier;
+      if(card){const target=tier==null?document.getElementById('bank'):document.querySelector(`.tier-drop[data-tier="${tier}"]`);target?.appendChild(card);}
+      try{
+        const {error}=await sb.from('tier_answers').update({ranked_value:tier}).eq('id',id).eq('game_id',state.game.id);
+        if(error)throw error;
+      }catch(err){answer.ranked_value=previous;toast('Não foi possível mover: '+err.message)}
+      finally{rankingSaving=false;render()}
+    };
+    const zones=[...document.querySelectorAll('.dropzone')];
+    const targetAt=(x,y)=>document.elementFromPoint(x,y)?.closest('.dropzone, .ranking-bank-v119');
+    const tierFor=el=>el?.closest('.tier-drop')?Number(el.closest('.tier-drop').dataset.tier):null;
+    const clear=()=>document.querySelectorAll('.dragover').forEach(x=>x.classList.remove('dragover'));
+    document.querySelectorAll('.answer-card[draggable="true"]').forEach(card=>{
+      card.addEventListener('dragstart',e=>{draggingAnswer=true;e.dataTransfer.setData('text/plain',card.dataset.answerId);e.dataTransfer.effectAllowed='move'});
+      card.addEventListener('dragend',()=>{draggingAnswer=false;clear()});
+      // Pointer Events makes dragging work consistently on desktop and Android.
+      let point=null,ghost=null;
+      card.addEventListener('pointerdown',e=>{
+        if(e.pointerType==='mouse'&&e.button!==0)return;
+        point={id:e.pointerId,x:e.clientX,y:e.clientY,active:false};
+      });
+      card.addEventListener('pointermove',e=>{
+        if(!point||e.pointerId!==point.id||e.pointerType==='mouse')return;
+        if(!point.active&&Math.hypot(e.clientX-point.x,e.clientY-point.y)<9)return;
+        if(!point.active){point.active=true;draggingAnswer=true;ghost=card.cloneNode(true);ghost.classList.add('ranking-drag-ghost');document.body.appendChild(ghost);card.setPointerCapture(e.pointerId)}
+        e.preventDefault();ghost.style.left=e.clientX+'px';ghost.style.top=e.clientY+'px';clear();targetAt(e.clientX,e.clientY)?.classList.add('dragover');
+      });
+      const finish=e=>{
+        if(!point||e.pointerId!==point.id)return;
+        const wasActive=point.active;point=null;
+        if(ghost){ghost.remove();ghost=null}clear();draggingAnswer=false;
+        if(wasActive){const target=targetAt(e.clientX,e.clientY);if(target)moveAnswer(card.dataset.answerId,tierFor(target),card)}
+      };
+      card.addEventListener('pointerup',finish);card.addEventListener('pointercancel',finish);
     });
-    // The whole left answers panel is also a return target. This keeps the bank usable
-    // even when every answer has already been placed in a tier and #bank is visually empty.
-    document.querySelectorAll('.ranking-bank-v119').forEach(bank=>{
-      bank.addEventListener('dragover',e=>{e.preventDefault();bank.classList.add('dragover')});
-      bank.addEventListener('dragleave',e=>{if(!bank.contains(e.relatedTarget))bank.classList.remove('dragover')});
-      bank.addEventListener('drop',async e=>{if(e.target.closest('.tier-drop'))return;e.preventDefault();bank.classList.remove('dragover');const id=e.dataTransfer.getData('text/plain');if(id)await moveAnswer(id,null)});
+    [...zones,...document.querySelectorAll('.ranking-bank-v119')].forEach(zone=>{
+      zone.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';zone.classList.add('dragover')});
+      zone.addEventListener('dragleave',e=>{if(!zone.contains(e.relatedTarget))zone.classList.remove('dragover')});
+      zone.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();const id=e.dataTransfer.getData('text/plain');draggingAnswer=false;clear();moveAnswer(id,tierFor(zone),document.querySelector(`[data-answer-id="${id}"]`))});
     });
   }
 
   async function hostAutoProgress(force=false){
     if(!state.game||state.role!=='host'||state.game.status!=='answering')return;
-    const done=answeredCount()>=currentPlayers().length;const expired=!infiniteTime()&&secondsLeft(state.game.answer_deadline)<=0;
+    const done=answeredCount()>=roundParticipants().length;const expired=!infiniteTime()&&secondsLeft(state.game.answer_deadline)<=0;
     if(force||done||expired){await setRanking();}
   }
   async function setRanking(){
@@ -531,11 +574,11 @@
     cancelEditPlayer(){state.editingProfile=false;routeFromGame();render()},
     async savePlayerProfile(){const name=document.getElementById('editPlayerName')?.value.trim();if(!name)return toast('Digite seu nome.');try{state.me=await dbUpdate('tier_players',state.me.id,{name,character_id:SELECTED_CHARACTER,updated_at:nowIso()});state.editingProfile=false;savePlayerSession();routeFromGame();render()}catch(e){toast(e.message)}},
     async disconnectPlayer(){if(!state.me||!state.game)return;if(appConfirmResolver)return;if(!(await appConfirm('Você pode entrar novamente com o código da sala depois, se ela ainda estiver aberta.',{title:'Sair da partida?',confirmText:'Sair',cancelText:'Ficar',danger:true})))return;try{await sb.from('tier_players').update({is_active:false,left_voluntarily:true,updated_at:nowIso()}).eq('id',state.me.id).eq('game_id',state.game.id)}catch(e){console.warn(e)}stopPresence();clearPlayerSession();sessionStorage.removeItem('tier_player_id');resetRealtime();state.role=null;state.game=null;state.me=null;state.players=[];state.answers=[];state.editingProfile=false;state.view='home';history.replaceState({},'',location.pathname);render();toast('Você saiu da partida.')},
-    async kick(id){const p=state.players.find(x=>x.id===id);if(!(await appConfirm(`Expulsar ${p?.name||'este jogador'} da partida?`,{title:'Remover jogador?',confirmText:'Remover',cancelText:'Cancelar',danger:true})))return;try{await sb.from('tier_players').update({is_active:false,left_voluntarily:true,updated_at:nowIso()}).eq('id',id);await refreshAndRender()}catch(e){toast(e.message)}},
+    async kick(id){if(state.role!=='host')return;const p=state.players.find(x=>x.id===id);if(!(await appConfirm(`Expulsar ${p?.name||'este jogador'} da partida?`,{title:'Remover jogador?',confirmText:'Remover',cancelText:'Cancelar',danger:true})))return;try{const {error}=await sb.from('tier_players').update({is_active:false,left_voluntarily:true,updated_at:nowIso()}).eq('id',id).eq('game_id',state.game.id);if(error)throw error;await refreshAndRender();if(state.game?.status==='answering')hostAutoProgress()}catch(e){toast(e.message)}},
     async startGame(){if(currentPlayers().length<2)return;try{await loadThemes();const g=await dbUpdate('tier_games',state.game.id,{status:'theme',round_no:1,theme_candidate:randomTheme(),updated_at:nowIso()});state.game=g;routeFromGame();render()}catch(e){toast(e.message)}},
     async skipTheme(){try{await loadThemes();state.game=await dbUpdate('tier_games',state.game.id,{theme_candidate:randomTheme(state.game.theme_candidate),updated_at:nowIso()});render()}catch(e){toast(e.message)}},
     async chooseTheme(){try{const deadline=infiniteTime()?null:new Date(Date.now()+state.game.answer_seconds*1000).toISOString();const assignments=shuffledAssignments(currentPlayers());state.answerDraft='';state.answerDraftRound=state.game.round_no;state.game=await dbUpdate('tier_games',state.game.id,{status:'answering',current_theme:state.game.theme_candidate,assignments,answer_deadline:deadline,updated_at:nowIso()});routeFromGame();render()}catch(e){toast(e.message)}},
-    async submitAnswer(){const t=document.getElementById('answerText').value.trim();if(!t)return toast('Digite uma resposta.');if(!infiniteTime()&&secondsLeft(state.game.answer_deadline)<=0)return toast('O tempo acabou.');try{const secret=(state.game.assignments||{})[state.me.id];await dbInsert('tier_answers',{game_id:state.game.id,round_no:state.game.round_no,player_id:state.me.id,answer_text:t,secret_value:secret});state.answerDraft='';state.answerDraftRound=null;await refreshAndRender()}catch(e){toast(e.message)}},
+    async submitAnswer(){if(!Object.prototype.hasOwnProperty.call(state.game.assignments||{},state.me?.id))return toast('Aguarde a próxima rodada.');const t=document.getElementById('answerText').value.trim();if(!t)return toast('Digite uma resposta.');if(!infiniteTime()&&secondsLeft(state.game.answer_deadline)<=0)return toast('O tempo acabou.');try{const secret=(state.game.assignments||{})[state.me.id];await dbInsert('tier_answers',{game_id:state.game.id,round_no:state.game.round_no,player_id:state.me.id,answer_text:t,secret_value:secret});state.answerDraft='';state.answerDraftRound=null;await refreshAndRender()}catch(e){toast(e.message)}},
     async forceRanking(){await setRanking()},
     async finishRanking(){const rs=roundAnswers();const placed=rs.filter(a=>Number.isInteger(a.ranked_value));if(placed.length!==rs.length)return toast('Posicione todas as respostas antes de finalizar.');try{state.game=await dbUpdate('tier_games',state.game.id,{status:'reveal',updated_at:nowIso()});state.view='hostRanking';render();await revealSequentially()}catch(e){toast(e.message)}},
     async continueAfterReveal(){try{state.game=await dbUpdate('tier_games',state.game.id,{status:'round_result',updated_at:nowIso()});routeFromGame();render()}catch(e){toast(e.message)}},
@@ -561,28 +604,32 @@
     const rs=roundAnswers();
     const participantIds=[...new Set(rs.map(a=>a.player_id))];
     const items=[...rs].sort((a,b)=>(b.ranked_value??-1)-(a.ranked_value??-1));
+    const competitive=!coop(gameMode());
     for(const a of items){
       const good=a.ranked_value===a.secret_value;
-      if(coop(gameMode())){await sb.from('tier_answers').update({points_awarded:good?50:0,revealed_at:nowIso()}).eq('id',a.id);await loadGame(state.game.id);render();await new Promise(r=>setTimeout(r,850));continue;}
-      const ownerAward=good?50*participantIds.length:0;
-      await sb.from('tier_answers').update({points_awarded:ownerAward,revealed_at:nowIso()}).eq('id',a.id);
-      if(good){
+      const ownerAward=good?(competitive?50*participantIds.length:50):0;
+      const jobs=[sb.from('tier_answers').update({points_awarded:ownerAward,revealed_at:nowIso()}).eq('id',a.id)];
+      if(competitive&&good){
         for(const id of participantIds){
-          if(id===a.player_id)continue;
           const p=state.players.find(x=>x.id===id);
           if(!p)continue;
-          p.score=(p.score||0)+50;
-          await sb.from('tier_players').update({score:p.score}).eq('id',id);
-        }
-        const owner=state.players.find(x=>x.id===a.player_id);
-        if(owner){
-          owner.score=(owner.score||0)+ownerAward;
-          await sb.from('tier_players').update({score:owner.score}).eq('id',owner.id);
+          const award=id===a.player_id?ownerAward:50;
+          p.score=(p.score||0)+award;
+          jobs.push(sb.from('tier_players').update({score:p.score}).eq('id',id));
         }
       }
-      await loadGame(state.game.id);render();await new Promise(r=>setTimeout(r,1100));
+      const results=await Promise.all(jobs);
+      const failed=results.find(result=>result.error);
+      if(failed)throw failed.error;
+      a.revealed_at=nowIso();a.points_awarded=ownerAward;
+      render();
+      await new Promise(r=>setTimeout(r,520));
     }
-    if(coop(gameMode())){const delta=deltaFromAnswers(rs,gameMode());state.game=await dbUpdate('tier_games',state.game.id,{group_score:Number(state.game.group_score||0)+delta,round_score:delta,updated_at:nowIso()});await loadGame(state.game.id);render();}
+    if(!competitive){
+      const delta=deltaFromAnswers(rs,gameMode());
+      state.game=await dbUpdate('tier_games',state.game.id,{group_score:Number(state.game.group_score||0)+delta,round_score:delta,updated_at:nowIso()});
+      render();
+    }
   }
 
   function readCouchSetup(){
@@ -612,7 +659,7 @@
   function couchRankingCards(tier){return state.couch.answers.filter(a=>tier===null?a.ranked==null:a.ranked===tier).map(couchAnswerCard).join('')}
   function couchAnswerCard(a){const p=state.couch.players.find(x=>x.id===a.playerId);const good=a.ranked===a.secret;return `<div class="answer-card ranking-answer-card ${a.revealed?(good?'reveal-good':'reveal-bad'):''}" draggable="${!state.couch.revealing}" data-answer-id="${a.id}" style="--player-color:${NEUTRAL_PLAYER}">${characterImage(p,"ranking-character")}<div class="grow"><div class="owner">${esc(p.name)}</div><div class="answer">${esc(a.text)}</div></div>${a.revealed?`<span class="true-badge">${a.secret}</span>`:''}</div>`}
   function couchTierRow(n){return `<div class="tier-row"><div class="tier-label t${n}">${n}</div><div class="tier-drop dropzone" data-tier="${n}">${couchRankingCards(n)}</div></div>`}
-  function couchRevealSequentially(){const items=[...state.couch.answers].sort((a,b)=>b.ranked-a.ranked);const participantCount=state.couch.answers.length;let i=0;const next=()=>{if(i>=items.length){if(coop(couchMode())&&!state.couch.coopScored){const delta=deltaFromAnswers(state.couch.answers,couchMode());state.couch.roundScore=delta;state.couch.groupScore=(state.couch.groupScore||0)+delta;state.couch.coopScored=true;render();}return;}const a=items[i++];a.revealed=true;const good=a.ranked===a.secret;if(coop(couchMode())){render();setTimeout(next,950);return;}if(good){state.couch.players.forEach(p=>{if(p.id===a.playerId)return;p.score+=50;p.roundPoints=(p.roundPoints||0)+50});const owner=state.couch.players.find(x=>x.id===a.playerId);if(owner){const ownerAward=50*participantCount;owner.score+=ownerAward;owner.roundPoints=(owner.roundPoints||0)+ownerAward}}render();setTimeout(next,950)};next()}
+  function couchRevealSequentially(){const items=[...state.couch.answers].sort((a,b)=>b.ranked-a.ranked);const participantCount=state.couch.answers.length;let i=0;const next=()=>{if(i>=items.length){if(coop(couchMode())&&!state.couch.coopScored){const delta=deltaFromAnswers(state.couch.answers,couchMode());state.couch.roundScore=delta;state.couch.groupScore=(state.couch.groupScore||0)+delta;state.couch.coopScored=true;render();}return;}const a=items[i++];a.revealed=true;const good=a.ranked===a.secret;if(coop(couchMode())){render();setTimeout(next,520);return;}if(good){state.couch.players.forEach(p=>{if(p.id===a.playerId)return;p.score+=50;p.roundPoints=(p.roundPoints||0)+50});const owner=state.couch.players.find(x=>x.id===a.playerId);if(owner){const ownerAward=50*participantCount;owner.score+=ownerAward;owner.roundPoints=(owner.roundPoints||0)+ownerAward}}render();setTimeout(next,520)};next()}
   function couchFinalBoard(){const oldPlayers=state.players;state.players=state.couch.players;const html=finalBoard();state.players=oldPlayers;return html}
 
   // Resume/join by URL
