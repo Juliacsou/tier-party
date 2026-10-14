@@ -53,3 +53,7 @@ O `config.js` já está configurado com o projeto informado anteriormente. Esta 
 4. A coluna `left_voluntarily` impede que processos antigos de expiração de presença desativem jogadores por engano. A retomada reconecta as assinaturas em tempo real e consulta os dados da partida.
 5. Limitação: navegadores podem descartar a aba inteira, e alguns restauram abas mesmo após reiniciar; o armazenamento de sessão é controlado pelo navegador. Teste em um aparelho real usando bloqueio prolongado e alternância de aplicativos.
 6. Se existir uma rotina de banco que encerre *a partida inteira* quando o host perde o heartbeat, ela precisará ser ajustada separadamente; esta migração protege a sessão dos jogadores, não o encerramento automático de salas.
+
+
+## Versão R2 / Supabase Auth
+Imagens: https://audio.altigames.com.br/tier/characters/. Caminhos antigos no campo image_path são preservados. Novos uploads usam o Worker altigames-media-api e gravam a chave completa. O painel exige autenticação Supabase Auth e vínculo com altigames_admins. **Antes de publicar, configurar políticas RLS para escrita apenas a administradores nas tabelas tier_characters e tier_themes.** Arquivos legados migrados não são excluídos pela API. Não apagar originais do Supabase até a verificação em produção.

@@ -97,7 +97,7 @@
   function backBtn(){return `<button class="btn ghost small" data-action="home">← Voltar</button>`}
   function playerColor(){return NEUTRAL_PLAYER}
   function characterFor(p){return CHARACTERS.find(c=>String(c.id)===String(p?.character_id))}
-  function characterUrl(c){if(!c?.image_path||!sb)return '';return sb.storage.from('tier-characters').getPublicUrl(c.image_path).data.publicUrl}
+  function characterUrl(c){if(!c?.image_path||!sb)return '';return 'https://audio.altigames.com.br/' + (String(c.image_path).startsWith('tier/characters/') ? c.image_path : 'tier/characters/' + c.image_path)}
   function characterImage(p,extra=''){const c=characterFor(p);const url=characterUrl(c);return url?`<img class="character-avatar ${extra}" src="${esc(url)}" alt="${esc(c.name)}" loading="lazy">`:`<span class="character-avatar character-placeholder ${extra}" aria-label="Personagem indisponível">?</span>`}
   function characterPicker(){return `<div class="character-picker"><div class="player-picker-title">Escolha seu personagem</div><div class="character-grid" role="group" aria-label="Selecionar personagem">${CHARACTERS.map(c=>`<button type="button" class="character-choice ${String(SELECTED_CHARACTER)===String(c.id)?'selected':''}" data-character="${c.id}" aria-label="${esc(c.name)}" aria-pressed="${String(SELECTED_CHARACTER)===String(c.id)}"><img src="${esc(characterUrl(c))}" alt=""><span>${esc(c.name)}</span></button>`).join('')}</div></div>`}
 
